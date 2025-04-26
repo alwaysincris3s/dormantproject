@@ -1,9 +1,9 @@
 #!/bin/bash
 
-# Load the configuration file to get the durations
+#load the configuration file to get the durations
 source /etc/dormant.conf
 
-# Double check if the config file has the required parameters
+#double check if the config file has the required parameters
 if [ -z "$DORMANT_USERACCOUNT_DURATION" ] || [ -z "$DORMANT_SERVICEACCOUNT_DURATION" ]; then
     echo "Error: Config file missing required parameters."
     exit 1
@@ -13,7 +13,7 @@ fi
 echo "Duration of User account: $DORMANT_USERACCOUNT_DURATION days"
 echo "Duration of Service account: $DORMANT_SERVICEACCOUNT_DURATION days"
 
-# Function to extract the list of user accounts
+#extract the list of user accounts
 check_user_account() {
     # Extract the list of usernames with UID >= 1000 in a variable (to store it)
     user_account=$(grep '^[^:]*:[^:]*:[1-9][0-9]\{3,\}:' /etc/passwd | cut -d: -f1)
@@ -60,10 +60,10 @@ detect_dormant_user() {
     done
 }
 
-# Call the function to extract users
+#call function to extract users
 check_user_account
 
-# Call the function to check dormant users
+#call the function to check dormant users
 detect_dormant_user
 
 # Output the list of dormant users detected

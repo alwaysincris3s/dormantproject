@@ -21,51 +21,58 @@ check_user_account() {
 
 #detect and see if user accounts are dormant
 detect_dormant_user() {
-    dormant_user=""
-    no_log_user=""
+    dormant_detected_user=""  # To store the list of dormant users
     
     for user in $user_account; do
-        # extract the login date
+        # Extract the login date for the user
         lastlogin=$(lastlog -u "$user" | awk 'NR==2')
-        
-        #if the user has never logged in
-        if echo "$lastlogin" | grep -q "Never logged in"; then
-          
-            no_log_user+="$user "
 
+        # If the login date is not found or is invalid, skip this user
+        if [[ -z "$lastlogin" ]] || [[ "$lastlogin" == *"Never logged in"* ]]; then
+            #echo "No valid last login date for user $user."
             continue
         fi
 
-        #extract date 
+        # Extract date (assuming format 'Wed Apr 2 14:16:20')
         last_login_date=$(echo "$lastlogin" | awk '{print $4, $5, $6, $7}')
         
-        #check valid date
+        # Check if the login date is valid
         if [[ -n "$last_login_date" ]]; then
-            #calculate difference
+            # Calculate the difference in days
             if last_login_ts=$(date -d "$last_login_date" +%s 2>/dev/null); then
                 now=$(date +%s)
-                difference=$(( (now - last_login_ts) / 86400 ))
-                echo "User $dormant_user last logged in on: $last_login_date ($difference days ago)"
-
-                if [ "$difference" -eq "$DORMANT_USERACCOUNT_DURATION" ]; then
-        
+                difference=$(( (now - last_login_ts) / 86400 ))  # Convert seconds to days
+                
+                echo "User $user last logged in on: $last_login_date ($difference days ago)"
+                
+                # Check if the user is dormant based on the duration (>= DORMANT_USERACCOUNT_DURATION)
+                if [ "$difference" -ge "$DORMANT_USERACCOUNT_DURATION" ]; then
                     dormant_detected_user+="$user "
                 fi
             else
                 echo "Could not parse last login date for user $user: $last_login_date"
             fi
         else
-            echo " No valid last login date for user $user."
+            echo "No valid last login date for user $user."
         fi
     done
+
+   # After the loop, print the dormant users
+    if [[ -n "$dormant_detected_user" ]]; then
+        echo "Dormant users detected: $dormant_detected_user"
+    else
+        echo "No dormant users detected."
+    fi
 }
+
+
+   
+
+
+
 
 #call function to extract users
 check_user_account
 
 #call the function to check dormant users
 detect_dormant_user
-
-# Output the list of dormant users detected
-echo "Dormant users detected: $dormant_detected_user"
-echo "Dormant users that never logged in: $no_log_user"

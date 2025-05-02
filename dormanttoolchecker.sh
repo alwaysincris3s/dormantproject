@@ -21,8 +21,8 @@ check_user_account() {
 
 #detect and see if user accounts are dormant
 detect_dormant_user() {
-    dormant_detected_user=""  # To store the list of dormant users
-    
+    dormant_detected_user=()  # To store the list of dormant users
+
     for user in $user_account; do
         # Extract the login date for the user
         lastlogin=$(lastlog -u "$user" | awk 'NR==2')
@@ -47,7 +47,7 @@ detect_dormant_user() {
                 
                 # Check if the user is dormant based on the duration (>= DORMANT_USERACCOUNT_DURATION)
                 if [ "$difference" -ge "$DORMANT_USERACCOUNT_DURATION" ]; then
-                    dormant_detected_user+="$user "
+                    dormant_detected_user+=("$user")
                 fi
             else
                 echo "Could not parse last login date for user $user: $last_login_date"
@@ -58,21 +58,55 @@ detect_dormant_user() {
     done
 
    # After the loop, print the dormant users
-    if [[ -n "$dormant_detected_user" ]]; then
-        echo "Dormant users detected: $dormant_detected_user"
+    if [[ ${#dormant_detected_user[@]} -gt 0 ]]; then
+        echo "Dormant users detected: ${dormant_detected_user[*]}"
     else
         echo "No dormant users detected."
     fi
 }
 
+#function to generate reports for the admin to see what is missing 
+generate_report() {
+    REPORT_DIR="/dormant_reports"
+    [ ! -d "$REPORT_DIR" ] && mkdir -p "$REPORT_DIR"
 
-   
+    timestamp=$(date "+%d %b %Y %I:%M %p")
 
+    report_file="$REPORT_DIR/dormant_report_$timestamp.txt"
 
+    {
+        echo "---------------------------------------------------------------------------"
+        echo "Dormant Users Report - $timestamp"
+        echo "---------------------------------------------------------------------------"
+        echo "Dormant Users "
+        echo "---------------------------------------------------------------------------"
 
+        if [ ${#dormant_detected_user[@]} -eq 0 ]; then
+            echo "No dormant users found."
+        else
+            count=1
+            for user in "${dormant_detected_user[@]}"; do
+                echo "$count. $user"
+                ((count++))
+            done
+        fi
+
+        echo "---------------------------------------------------------------------------"
+        echo "Email Pending "
+        echo
+        echo "---------------------------------------------------------------------------"
+        echo "Inactive (Deactivated Accounts)"
+        echo "---------------------------------------------------------------------------"
+    } >> "$report_file"
+
+    echo "Report generated at: $report_file"
+}
 
 #call function to extract users
 check_user_account
 
 #call the function to check dormant users
 detect_dormant_user
+
+#call the generate report 
+generate_report

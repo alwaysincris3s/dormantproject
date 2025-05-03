@@ -9,13 +9,13 @@ if [ -z "$DORMANT_USERACCOUNT_DURATION" ] || [ -z "$DORMANT_SERVICEACCOUNT_DURAT
     exit 1
 fi
 
-# Duration output check
+#duration output check
 echo "Duration of User account: $DORMANT_USERACCOUNT_DURATION days"
 echo "Duration of Service account: $DORMANT_SERVICEACCOUNT_DURATION days"
 
 #extract the list of user accounts
 check_user_account() {
-    # Extract the list of usernames with UID >= 1000 in a variable (to store it)
+    #extract the list of usernames with UID >= 1000 in a variable (to store it)
     user_account=$(grep '^[^:]*:[^:]*:[1-9][0-9]\{3,\}:' /etc/passwd | cut -d: -f1)
 } 
 
@@ -25,28 +25,29 @@ detect_dormant_user() {
     dormant_detected_user=() 
 
     for user in $user_account; do
-        # Extract the login date for the user
+        #extract the login date for the user
         lastlogin=$(lastlog -u "$user" | awk 'NR==2')
 
-        # If the login date is not found or is invalid, skip this user
+        #if the login date  not found or invalid skip this user
         if [[ -z "$lastlogin" ]] || [[ "$lastlogin" == *"Never logged in"* ]]; then
             #echo "No valid last login date for user $user."
             continue
         fi
 
-        # Extract date (assuming format 'Wed Apr 2 14:16:20')
-        last_login_date=$(echo "$lastlogin" | awk '{print $4, $5, $6, $7}')
+        #extract date
+        last_login_date=$(echo "$lastlogin" | awk '{print $4, $5, $6}')
         
-        # Check if the login date is valid
+        #see if the login date is valid
         if [[ -n "$last_login_date" ]]; then
-            # Calculate the difference in days
+            #converting login date
             if last_login_ts=$(date -d "$last_login_date" +%s 2>/dev/null); then
-                now=$(date +%s)
-                difference=$(( (now - last_login_ts) / 86400 ))  # Convert seconds to days
+                today_date=$(date +%Y-%m-%d)
+                today_ts=$(date -d "$today_date" +%s)
+                difference=$(( (today_ts - last_login_ts) / 86400 ))  # Convert seconds to days
                 
                 echo "User $user last logged in on: $last_login_date ($difference days ago)"
                 
-                # Check if the user is dormant based on the duration (>= DORMANT_USERACCOUNT_DURATION)
+                #compare the differences 
                 if [ "$difference" -ge "$DORMANT_USERACCOUNT_DURATION" ]; then
                     dormant_detected_user+=("$user")
                 fi
@@ -58,7 +59,7 @@ detect_dormant_user() {
         fi
     done
 
-   # After the loop, print the dormant users
+   #after looping it print the dormant users
     if [[ ${#dormant_detected_user[@]} -gt 0 ]]; then
         echo "Dormant users detected: ${dormant_detected_user[*]}"
     else

@@ -21,7 +21,8 @@ check_user_account() {
 
 #detect and see if user accounts are dormant
 detect_dormant_user() {
-    dormant_detected_user=()  # To store the list of dormant users
+    #store the list of detected users 
+    dormant_detected_user=() 
 
     for user in $user_account; do
         # Extract the login date for the user
@@ -80,7 +81,7 @@ generate_report() {
         echo "---------------------------------------------------------------------------"
         echo "Dormant Users 👥 "
         echo "---------------------------------------------------------------------------"
-
+        #call the function from detect_dormant_users function 
         if [ ${#dormant_detected_user[@]} -eq 0 ]; then
             echo "No dormant users found."
         else

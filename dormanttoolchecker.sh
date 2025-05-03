@@ -76,9 +76,9 @@ generate_report() {
 
     {
         echo "---------------------------------------------------------------------------"
-        echo "Dormant Users Report - $timestamp"
+        echo "Dormant Users Report 📜- $timestamp "
         echo "---------------------------------------------------------------------------"
-        echo "Dormant Users "
+        echo "Dormant Users 👥 "
         echo "---------------------------------------------------------------------------"
 
         if [ ${#dormant_detected_user[@]} -eq 0 ]; then
@@ -92,7 +92,7 @@ generate_report() {
         fi
 
         echo "---------------------------------------------------------------------------"
-        echo "Email Pending "
+        echo "Email Pending 📩"
         echo
         echo "---------------------------------------------------------------------------"
         echo "Inactive (Deactivated Accounts)"

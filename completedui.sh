@@ -86,7 +86,7 @@ view_reports() {
         return
     fi
 
-    dialog --inputbox "Enter date to search (e.g. 01/01/2025) or leave blank to list all:" 8 60 2> "$TMPFILE"
+    dialog --inputbox "Enter date to search (e.g. 12 July 2025) or leave blank to list all:" 8 60 2> "$TMPFILE"
     search=$(<"$TMPFILE")
 
     OPTIONS=()
@@ -95,32 +95,40 @@ view_reports() {
         rawdate="${filename#dormant_report_}"
         rawdate="${rawdate%.txt}"
 
+        # Split parts: day, month abbrev, year, time (with AM/PM)
         day=$(echo "$rawdate" | cut -d'_' -f1)
-        month_text=$(echo "$rawdate" | cut -d'_' -f2)
+        month_abbr=$(echo "$rawdate" | cut -d'_' -f2)
         year=$(echo "$rawdate" | cut -d'_' -f3)
         time_raw=$(echo "$rawdate" | cut -d'_' -f4-)
 
-        case "$month_text" in
-            Jan) month="01" ;;
-            Feb) month="02" ;;
-            Mar) month="03" ;;
-            Apr) month="04" ;;
-            May) month="05" ;;
-            Jun) month="06" ;;
-            Jul) month="07" ;;
-            Aug) month="08" ;;
-            Sep) month="09" ;;
-            Oct) month="10" ;;
-            Nov) month="11" ;;
-            Dec) month="12" ;;
-            *) month="00" ;;
+        # Convert month abbrev to full month name
+        case "$month_abbr" in
+            Jan) month_full="January" ;;
+            Feb) month_full="February" ;;
+            Mar) month_full="March" ;;
+            Apr) month_full="April" ;;
+            May) month_full="May" ;;
+            Jun) month_full="June" ;;
+            Jul) month_full="July" ;;
+            Aug) month_full="August" ;;
+            Sep) month_full="September" ;;
+            Oct) month_full="October" ;;
+            Nov) month_full="November" ;;
+            Dec) month_full="December" ;;
+            *) month_full="$month_abbr" ;;
         esac
 
-        formatted_date="${day}/${month}/${year}"
-        formatted_time=$(echo "$time_raw" | sed 's/-/:/g')
-        display="${formatted_date} ${formatted_time}"
+        # Time raw looks like 09-16_PM or 02-30_AM
+        # Convert to 12-hour with colon and space before AM/PM
+        time_formatted=$(echo "$time_raw" | sed -r 's/^([0-9]{2})-([0-9]{2})_(AM|PM)$/\1:\2 \3/')
 
-        if [[ -z "$search" || "$display" == *"$search"* ]]; then
+        # Remove leading zero from hour for nicer format (e.g. 09:16 PM -> 9:16 PM)
+        time_formatted=$(echo "$time_formatted" | sed -r 's/^0([1-9])/\1/')
+
+        display="${day} ${month_full} ${year} at ${time_formatted}"
+
+        # Filter by user search input if given (case insensitive)
+        if [[ -z "$search" || "${display,,}" == *"${search,,}"* ]]; then
             OPTIONS+=("$display" "")
             FILE_MAP["$display"]="$file"
         fi
@@ -141,26 +149,81 @@ view_reports() {
     fi
 }
 
+
 # -------- set account expiry --------
 set_expiry() {
-    dialog --inputbox "Enter username:" 8 40 2> "$TMPFILE"
-    username=$(<"$TMPFILE")
+    # Get all users with UID >= 1000 (normal users)
+    mapfile -t all_users < <(awk -F: '($3>=1000)&&($1!="nobody"){print $1}' /etc/passwd)
 
-    if ! id "$username" &>/dev/null; then
-        dialog --msgbox "User '$username' not found." 8 40
+    if [ ${#all_users[@]} -eq 0 ]; then
+        dialog --msgbox "No standard users found." 8 40
         return
     fi
 
-    dialog --inputbox "Enter expiry date (YYYY-MM-DD):" 8 40 2> "$TMPFILE"
-    expiry_date=$(<"$TMPFILE")
+    while true; do
+        # Ask for search input
+        dialog --inputbox "Enter username to search (leave blank to list all):" 8 60 2> "$TMPFILE"
+        if [ $? -ne 0 ]; then
+            return
+        fi
+        search=$(<"$TMPFILE")
 
-    if date -d "$expiry_date" &>/dev/null; then
-        sudo chage -E "$expiry_date" "$username"
-        dialog --msgbox "Expiry date set for $username: $expiry_date" 8 50
-    else
-        dialog --msgbox "Invalid date format." 8 40
-    fi
+        # Filter users based on search input
+        if [ -z "$search" ]; then
+            filtered_users=("${all_users[@]}")
+        else
+            filtered_users=()
+            for u in "${all_users[@]}"; do
+                if [[ "$u" == *"$search"* ]]; then
+                    filtered_users+=("$u")
+                fi
+            done
+
+            if [ ${#filtered_users[@]} -eq 0 ]; then
+                dialog --msgbox "No users found matching \"$search\"." 8 40
+                continue
+            fi
+        fi
+
+        # Build options array with username + expiry date
+        OPTIONS=()
+        for u in "${filtered_users[@]}"; do
+            # Get expiry date, fallback to "No expiry"
+            expiry=$(chage -l "$u" 2>/dev/null | grep "Account expires" | cut -d: -f2- | xargs)
+            [[ -z "$expiry" ]] && expiry="No expiry"
+            OPTIONS+=("$u" "$expiry")
+        done
+
+        # Show menu to pick a user
+        selected_user=$(dialog --menu "Select a user to set expiry date:\n(Search: $search)" 20 70 15 "${OPTIONS[@]}" 3>&1 1>&2 2>&3)
+        if [ -z "$selected_user" ]; then
+            return
+        fi
+
+        # Input new expiry date
+        dialog --inputbox "Enter expiry date for $selected_user (YYYY-MM-DD), or empty to remove expiry:" 8 60 2> "$TMPFILE"
+        if [ $? -ne 0 ]; then
+            continue
+        fi
+        expiry_date=$(<"$TMPFILE")
+
+        if [ -z "$expiry_date" ]; then
+            # Remove expiry (set to never expire)
+            sudo chage -E -1 "$selected_user"
+            dialog --msgbox "Expiry removed for user $selected_user." 8 50
+        else
+            # Validate date format
+            if date -d "$expiry_date" &>/dev/null; then
+                sudo chage -E "$expiry_date" "$selected_user"
+                dialog --msgbox "Expiry date set for $selected_user: $expiry_date" 8 50
+            else
+                dialog --msgbox "Invalid date format. Please try again." 8 50
+            fi
+        fi
+    done
 }
+
+    
 
 # -------- create user --------
 create_user() {

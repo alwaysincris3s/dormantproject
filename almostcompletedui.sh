@@ -465,25 +465,36 @@ edit_existing_user() {
     done
 }
 
-# -------- update server URL manually (ngrok) --------
+# -------- Extract current server_url from script --------
+get_current_server_url() {
+    grep -Po '(?<=local server_url=")[^"]+' "$TARGET_SCRIPT"
+}
+
+# -------- Update server URL in script (reuse existing function) --------
 update_server_url_ui() {
-    current_url=$(grep -Po '(?<=server_url=)[^\n]+' "$CONFIG_FILE" 2>/dev/null || echo "")
-    dialog --inputbox "Enter new ngrok server URL:" 8 60 "$current_url" 2> "$TMPFILE"
+    current_url=$(get_current_server_url)
+    dialog --inputbox "Current ngrok URL:\n$current_url\n\nEnter new ngrok URL:" 10 70 "$current_url" 2> "$TMPFILE"
+    new_url=$(<"$TMPFILE")
+    if [[ -z "$new_url" ]]; then
+        dialog --msgbox "URL cannot be empty." 6 40
+        return
+    fi
+
+    # Show confirmation
+    dialog --yesno "Change ngrok URL from:\n$current_url\nto\n$new_url?" 10 60
     if [ $? -ne 0 ]; then
         dialog --msgbox "Update cancelled." 6 40
         return
     fi
-    new_url=$(<"$TMPFILE")
 
-    # Replace or add server_url in config
-    if grep -q "^server_url=" "$CONFIG_FILE"; then
-        sudo sed -i "s|^server_url=.*|server_url=$new_url|" "$CONFIG_FILE"
-    else
-        echo "server_url=$new_url" | sudo tee -a "$CONFIG_FILE" > /dev/null
-    fi
+    # Update script
+    sudo sed -i -r "s|^\s*local server_url=.*|    local server_url=\"$new_url\"  # updated|" "$TARGET_SCRIPT"
 
-    dialog --msgbox "Ngrok URL updated successfully." 6 40
+    updated_line=$(grep -P '^\s*local server_url=' "$TARGET_SCRIPT")
+    dialog --msgbox "Server URL updated successfully.\n\nUpdated line:\n$updated_line" 10 70
 }
+  
+
 
 # -------- generate new ngrok URL and update --------
 generate_new_ngrok_url() {
@@ -510,7 +521,7 @@ generate_new_ngrok_url() {
     fi
 
     # Update script server_url line
-    sudo sed -i -r "s|^\s*local server_url=.*|    local server_url=\"$forwarding_url\"  # updated by generate_new_ngrok_url|" "$TARGET_SCRIPT"
+    sudo sed -i -r "s|^\s*local server_url=.*|    local server_url=\"$forwarding_url\"  # updated URL |" "$TARGET_SCRIPT"
 
     # Show confirmation
     dialog --msgbox "Generated new ngrok URL:\n$forwarding_url\n\nUpdated script line:\n$(grep -P '^\s*local server_url=' "$TARGET_SCRIPT")" 12 70

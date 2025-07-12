@@ -303,39 +303,91 @@ update_config() {
         1 "User Dormancy (Current: $DORMANT_USERACCOUNT_DURATION days)" \
         2 "Service Dormancy (Current: $DORMANT_SERVICEACCOUNT_DURATION days)" \
         3 "Password Expiry (Current: $DORMANT_PASSWORD_EXPIRY_DURATION days)" \
-        4 "Custom Cron Schedule Input (Current: $DORMANT_CRON_SCHEDULE)" \
+        4 "Cron Schedule (Current: $DORMANT_CRON_SCHEDULE)" \
+        5 "Back" \
         3>&1 1>&2 2>&3)
 
     case $CHOICE in
         1)
             NEW=$(dialog --inputbox "Enter new dormant user account duration (days):" 8 50 "$DORMANT_USERACCOUNT_DURATION" 2>&1 >/dev/tty)
-            sudo sed -i "s/^DORMANT_USERACCOUNT_DURATION=.*/DORMANT_USERACCOUNT_DURATION=$NEW/" "$CONFIG_FILE"
-            dialog --msgbox "Updated user dormancy to $NEW days." 6 50
+            if [[ -n "$NEW" && "$NEW" =~ ^[0-9]+$ ]]; then
+                sudo sed -i "s/^DORMANT_USERACCOUNT_DURATION=.*/DORMANT_USERACCOUNT_DURATION=$NEW/" "$CONFIG_FILE"
+                dialog --msgbox "Updated user dormancy to $NEW days." 6 50
+            else
+                dialog --msgbox "Invalid input. Update cancelled." 6 50
+            fi
             ;;
         2)
             NEW=$(dialog --inputbox "Enter new dormant service account duration (days):" 8 50 "$DORMANT_SERVICEACCOUNT_DURATION" 2>&1 >/dev/tty)
-            sudo sed -i "s/^DORMANT_SERVICEACCOUNT_DURATION=.*/DORMANT_SERVICEACCOUNT_DURATION=$NEW/" "$CONFIG_FILE"
-            dialog --msgbox "Updated service dormancy to $NEW days." 6 50
+            if [[ -n "$NEW" && "$NEW" =~ ^[0-9]+$ ]]; then
+                sudo sed -i "s/^DORMANT_SERVICEACCOUNT_DURATION=.*/DORMANT_SERVICEACCOUNT_DURATION=$NEW/" "$CONFIG_FILE"
+                dialog --msgbox "Updated service dormancy to $NEW days." 6 50
+            else
+                dialog --msgbox "Invalid input. Update cancelled." 6 50
+            fi
             ;;
         3)
             NEW=$(dialog --inputbox "Enter new password expiry duration (days):" 8 50 "$DORMANT_PASSWORD_EXPIRY_DURATION" 2>&1 >/dev/tty)
-            sudo sed -i "s/^DORMANT_PASSWORD_EXPIRY_DURATION=.*/DORMANT_PASSWORD_EXPIRY_DURATION=$NEW/" "$CONFIG_FILE"
-            dialog --msgbox "Updated password expiry to $NEW days." 6 50
+            if [[ -n "$NEW" && "$NEW" =~ ^[0-9]+$ ]]; then
+                sudo sed -i "s/^DORMANT_PASSWORD_EXPIRY_DURATION=.*/DORMANT_PASSWORD_EXPIRY_DURATION=$NEW/" "$CONFIG_FILE"
+                dialog --msgbox "Updated password expiry to $NEW days." 6 50
+            else
+                dialog --msgbox "Invalid input. Update cancelled." 6 50
+            fi
             ;;
         4)
-            NEW=$(dialog --inputbox "Enter custom cron schedule (e.g. */5 * * * *):" 8 60 "$DORMANT_CRON_SCHEDULE" 2>&1 >/dev/tty)
-            sudo sed -i "s|^DORMANT_CRON_SCHEDULE=.*|DORMANT_CRON_SCHEDULE=\"$NEW\"|" "$CONFIG_FILE"
-            dialog --msgbox "Custom cron schedule set to: $NEW" 6 60
+            # Cron schedule submenu
+            CRON_CHOICE=$(dialog --menu "Update Cron Schedule - Choose method:" 15 50 3 \
+                1 "Custom cron schedule (manual input)" \
+                2 "Every day at specific time" \
+                3 "Cancel" \
+                3>&1 1>&2 2>&3)
 
-            # Update crontab: remove old and add new for TARGET_SCRIPT
+            case $CRON_CHOICE in
+                1)
+                    NEW=$(dialog --inputbox "Enter custom cron schedule (e.g. */5 * * * *):" 8 60 "$DORMANT_CRON_SCHEDULE" 2>&1 >/dev/tty)
+                    ;;
+                2)
+                    NEW_HOUR=$(dialog --inputbox "Enter hour (0-23):" 8 30 "0" 2>&1 >/dev/tty)
+                    if ! [[ "$NEW_HOUR" =~ ^([0-9]|1[0-9]|2[0-3])$ ]]; then
+                        dialog --msgbox "Invalid hour input." 6 40
+                        return
+                    fi
+
+                    NEW_MIN=$(dialog --inputbox "Enter minute (0-59):" 8 30 "0" 2>&1 >/dev/tty)
+                    if ! [[ "$NEW_MIN" =~ ^([0-9]|[1-5][0-9])$ ]]; then
+                        dialog --msgbox "Invalid minute input." 6 40
+                        return
+                    fi
+
+                    NEW="$NEW_MIN $NEW_HOUR * * *"
+                    ;;
+                *)
+                    return
+                    ;;
+            esac
+
+            if [[ -z "$NEW" ]]; then
+                dialog --msgbox "No schedule provided, update cancelled." 6 40
+                return
+            fi
+
+            # Update config file
+            sudo sed -i "s|^DORMANT_CRON_SCHEDULE=.*|DORMANT_CRON_SCHEDULE=\"$NEW\"|" "$CONFIG_FILE"
+
+            # Update crontab: remove old entry for TARGET_SCRIPT and add new one
             (crontab -l 2>/dev/null | grep -v "$TARGET_SCRIPT" ; echo "$NEW bash $TARGET_SCRIPT") | crontab -
 
-            dialog --msgbox "Crontab updated with new schedule." 6 50
+            dialog --msgbox "Crontab updated with schedule:\n$NEW" 6 50
+            ;;
+        5)
+            return
             ;;
         *)
             ;;
     esac
 
+    # Reload config to apply changes
     source "$CONFIG_FILE"
 }
 

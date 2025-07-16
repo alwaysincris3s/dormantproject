@@ -4,6 +4,7 @@ import datetime
 import subprocess
 
 app = Flask(__name__)
+
 OPT_IN_FILE = "/etc/dormant_opt_in.conf"
 DEACTIVATED_LOG = "/var/log/dormant/deactivated_users.log"
 
@@ -26,7 +27,6 @@ def confirm():
 
     if response == "yes" and user:
         now = datetime.datetime.now().strftime("%Y-%m-%d")
-
         os.makedirs(os.path.dirname(OPT_IN_FILE), exist_ok=True)
 
         # Remove any existing opt-in for the user
@@ -41,7 +41,7 @@ def confirm():
                     f.write(line)
             f.write(f"{user}={now}\n")
 
-        # 🔁 After confirming, redirect them to set new password
+        # Redirect to password reset form
         return redirect(url_for('reset_password', user=user))
     else:
         return "⚠️ Missing user or invalid response.", 400
@@ -64,8 +64,12 @@ def reset_password():
         return "❌ Passwords do not match.", 400
 
     try:
+        # Update password
         subprocess.run(['bash', '-c', f'echo "{user}:{password}" | chpasswd'], check=True)
-        subprocess.run(['chage', '-d', '0', user])
+        # Set last password change date to today (no forced change)
+        today_str = datetime.datetime.now().strftime("%Y-%m-%d")
+        subprocess.run(['chage', '-d', today_str, user], check=True)
+
         return f"✅ Password updated successfully for {user}. You may now log in."
     except Exception as e:
         return f"⚠️ Error updating password: {e}", 500
